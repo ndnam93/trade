@@ -2,14 +2,14 @@ package main
 
 import (
 	"github.com/astaxie/beego/orm"
-	"fmt"
 	"strings"
 	"github.com/astaxie/beego"
 	"net/http"
 	"io/ioutil"
-	"github.com/bitly/go-simplejson"
+	"github.com/tidwall/gjson"
 	"trade/models"
-	"os"
+	"fmt"
+	"strconv"
 )
 
 func init() {
@@ -28,24 +28,31 @@ type Company struct {
 
 type Companies []Company
 
-func main() {
+func fetchStockList() {
+	var createdCount int64
 	symbolsResponse, _ := http.Get("https://finfo-api.vndirect.com.vn//stocks/mini")
 	res, _ := ioutil.ReadAll(symbolsResponse.Body)
 
-	json, _ := simplejson.NewJson(res)
-	list, _ := json.Get("data").Array()
-
-
 	o := orm.NewOrm()
-	for _, c := range list {
-		company, _ := c.(map[interface{}]interface{})
-		fmt.Println(company)
-		os.Exit(0)
+	list := gjson.Get(string(res), "data")
+	//fmt.Printf("%#v", strconv.Itoa(int(list.Get("#").Int())))
+	//os.Exit(0)
+	list.ForEach(func(key, value gjson.Result) bool {
+		valueMap := value.Map()
 		var stock models.Stock
-		stock.Symbol = company["symbol"].(string)
-		fmt.Println(stock)
-		os.Exit(0)
-		o.Insert(&stock)
-	}
+		stock.Symbol = valueMap["symbol"].String()
+		created, _, _ := o.ReadOrCreate(&stock, "Symbol")
+		stock.CompanyName = valueMap["company"].String()
+		stock.Floor = valueMap["floor"].String()
+		o.Update(&stock)
+		if created {
+			createdCount += 1
+		}
+		return true
+	})
+	fmt.Println("Created " + strconv.Itoa(int(createdCount)) + " and updated " + strconv.Itoa(int(list.Get("#").Int() - createdCount)) + " stocks")
+}
 
+func main() {
+	fetchStockList()
 }
