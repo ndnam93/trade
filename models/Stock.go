@@ -16,6 +16,12 @@ func (stock *Stock) TableName() string {
 	return "stocks"
 }
 
+func (stock *Stock) TableUnique() [][]string {
+	return [][]string {
+		{"symbol"},
+	}
+}
+
 func init() {
 	orm.RegisterModel(new(Stock))
 
