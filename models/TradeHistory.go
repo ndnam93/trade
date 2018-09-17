@@ -10,6 +10,7 @@ type TradeHistory struct {
 	High int
 	Low int
 	Volume int
+	Resolution string
 }
 
 func (tradeHistory *TradeHistory) TableName() string {

@@ -28,6 +28,7 @@ func (m *CreateTradeHistoryTable_20180911_225716) Up() {
 		high int(255) NULL,
 		low int(255) NULL,
 		volume int(255) NULL,
+		resolution ENUM('15', '30', '60', 'D')
 		PRIMARY KEY (time)
 	);`)
 }

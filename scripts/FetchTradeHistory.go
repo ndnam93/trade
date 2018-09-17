@@ -10,56 +10,21 @@ import (
 	. "trade/models"
 	"fmt"
 	"strconv"
+	"os"
 )
 
+var o orm.Ormer
 func init() {
 	parts := []string{beego.AppConfig.String("mysqluser"), ":", beego.AppConfig.String("mysqlpass"),
 		"@tcp(", beego.AppConfig.String("mysqlurls"), ":3306)/", beego.AppConfig.String("mysqldb")}
 	orm.RegisterDataBase("default", "mysql", strings.Join(parts, ""))
+	o = orm.NewOrm()
 }
 
-type Company struct {
-	id int
-	symbol string
-	company string
-	floor string
-	indexCode string
-}
-
-type Companies []Company
-
-var o = orm.NewOrm()
-
-func fetchStockList() []Stock {
-	var (
-		createdCount int64
-		stocks []Stock
-	)
-	symbolsResponse, _ := http.Get("https://finfo-api.vndirect.com.vn/stocks/mini")
-	res, _ := ioutil.ReadAll(symbolsResponse.Body)
-
-	list := gjson.Get(string(res), "data")
-	list.ForEach(func(key, value gjson.Result) bool {
-		valueMap := value.Map()
-		var stock Stock
-		stock.Symbol = valueMap["symbol"].String()
-		created, _, _ := o.ReadOrCreate(&stock, "Symbol")
-		stock.CompanyName = valueMap["company"].String()
-		stock.Floor = valueMap["floor"].String()
-		o.Update(&stock)
-		if created {
-			createdCount += 1
-		}
-		stocks = append(stocks, stock)
-		return true
-	})
-	fmt.Println("Created " + strconv.Itoa(int(createdCount)) + " and updated " + strconv.Itoa(int(list.Get("#").Int() - createdCount)) + " stocks")
-	return stocks
-}
-
-func fetchTradeHistory(stocks []Stock , resolution string)  {
+func fetchTradeHistory(stocks []Stock , resolution string, startTime int, endTime int)  {
 	for _, stock := range stocks {
-		response, _ := http.Get("https://dchart-api.vndirect.com.vn/dchart/history?symbol=" + stock.Symbol + "&resolution=D")
+		response, _ := http.Get("https://dchart-api.vndirect.com.vn/dchart/history?symbol=" + stock.Symbol + "&resolution=" + resolution +
+			"&from=" + strconv.Itoa(startTime) + "&to=" + strconv.Itoa(endTime))
 		res, _ := ioutil.ReadAll(response.Body)
 		data := gjson.Parse(string(res))
 
@@ -81,6 +46,7 @@ func fetchTradeHistory(stocks []Stock , resolution string)  {
 			tradeHistory.High = int(data.Get("h." + strconv.Itoa(i)).Int())
 			tradeHistory.Low = int(data.Get("l." + strconv.Itoa(i)).Int())
 			tradeHistory.Volume = int(data.Get("v." + strconv.Itoa(i)).Int())
+			tradeHistory.Resolution = resolution
 			tradeHistoryList = append(tradeHistoryList, tradeHistory)
 		}
 		o.InsertMulti(len(tradeHistoryList), tradeHistoryList)
@@ -103,7 +69,18 @@ func getLastTimestamp(symbol string) int {
 
 
 func main() {
+	var (
+		stocks []Stock
+		startTime, endTime int
+	)
+	args := os.Args[1:]
 	fmt.Println("Start fetching")
-	stocks := fetchStockList()
-	fetchTradeHistory(stocks, "15")
+	o.QueryTable("stocks").All(&stocks)
+	if len(args) > 1 {
+		startTime, _ = strconv.Atoi(args[1])
+	}
+	if len(args) > 2 {
+		endTime, _ = strconv.Atoi(args[2])
+	}
+	fetchTradeHistory(stocks, args[0], startTime, endTime)
 }
